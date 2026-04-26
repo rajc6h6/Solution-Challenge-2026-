@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  --obsidian: #0a0a0f;
+  --surface: #111118;
+  --surface2: #1a1a24;
+  --cyan: #00d4ff;
+  --amber: #f59e0b;
+  --red: #ef4444;
+  --green: #10b981;
+  --purple: #a855f7;
+  --muted: #6b7280;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--obsidian);
+  color: white;
+  -webkit-font-smoothing: antialiased;
+}
+
+.bg-obsidian { background-color: var(--obsidian); }
+.bg-surface { background-color: var(--surface); }
+.bg-surface2 { background-color: var(--surface2); }
+.text-cyan { color: var(--cyan); }
+.text-muted { color: var(--muted); }
+.border-cyan { border-color: var(--cyan); }
+.font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+/* Pulse glow for status indicator */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 4px #10b981; opacity: 1; }
+  50% { box-shadow: 0 0 12px #10b981; opacity: 0.6; }
+}
+.animate-pulse-glow { animation: pulse-glow 2s ease infinite; }
+
+/* Risk bar animation */
+@keyframes risk-fill { from { width: 0; } to { width: var(--risk-width); } }
+.risk-bar { animation: risk-fill 0.8s ease-out forwards; }
+
+/* Fade in for cards */
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.fade-up { animation: fade-up 0.4s ease-out; }
+
+/* Recording pulse */
+@keyframes record-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+  50% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(239,68,68,0); }
+}
+.animate-record { animation: record-pulse 1.2s ease-in-out infinite; }
