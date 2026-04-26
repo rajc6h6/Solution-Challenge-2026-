@@ -1,20 +1,41 @@
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 
-if (!getApps().length) {
-  initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  });
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Missing ${name}. Set it in Vercel → Project → Settings → Environment Variables (Production).`);
+  }
+  return value;
 }
 
-const db = getFirestore();
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+function normalizePrivateKey(raw: string): string {
+  let value = raw.trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  }
+  return value.replace(/\\n/g, '\n');
+}
+
+function getDb(): Firestore {
+  if (!getApps().length) {
+    initializeApp({
+      credential: cert({
+        projectId: requireEnv('FIREBASE_PROJECT_ID'),
+        clientEmail: requireEnv('FIREBASE_CLIENT_EMAIL'),
+        privateKey: normalizePrivateKey(requireEnv('FIREBASE_PRIVATE_KEY')),
+      }),
+    });
+  }
+  return getFirestore();
+}
 
 type RiskLevel = 'low' | 'medium' | 'high';
 
@@ -63,6 +84,8 @@ interface PredictionLLMResponse {
 
 export async function POST() {
   try {
+    const db = getDb();
+
     const shipmentsSnapshot = await db
       .collection('shipments')
       .where('status', '==', 'active')
@@ -91,10 +114,10 @@ export async function POST() {
       });
 
       if (shouldAutoExecute(prediction)) {
-        await executeAutonomousAction(shipmentDoc.id, shipment, prediction);
+        await executeAutonomousAction(db, shipmentDoc.id, shipment, prediction);
         autoExecuted++;
       } else if (prediction.disruptionProbability >= 0.7) {
-        await escalateDecision(shipmentDoc.id, shipment, prediction);
+        await escalateDecision(db, shipmentDoc.id, shipment, prediction);
         escalated++;
       }
 
@@ -163,7 +186,12 @@ async function generatePrediction(shipment: ShipmentData): Promise<PredictionRes
   };
 }
 
-async function executeAutonomousAction(shipmentDocId: string, shipment: ShipmentData, prediction: PredictionResult) {
+async function executeAutonomousAction(
+  db: Firestore,
+  shipmentDocId: string,
+  shipment: ShipmentData,
+  prediction: PredictionResult
+) {
   const newRoute = chooseNewRoute(shipment.currentRoute);
   const rerouteCost = 127;
   const savedPenalty = shipment.customerPriority === 'critical' ? 800 : shipment.customerPriority === 'high' ? 400 : 200;
@@ -197,7 +225,12 @@ async function executeAutonomousAction(shipmentDocId: string, shipment: Shipment
   });
 }
 
-async function escalateDecision(shipmentDocId: string, shipment: ShipmentData, prediction: PredictionResult) {
+async function escalateDecision(
+  db: Firestore,
+  shipmentDocId: string,
+  shipment: ShipmentData,
+  prediction: PredictionResult
+) {
   await db.collection('decisions').add({
     shipmentId: shipment.shipmentId,
     decisionType: 'escalate_human',

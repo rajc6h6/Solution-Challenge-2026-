@@ -1,18 +1,41 @@
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 
-if (!getApps().length) {
-  initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  });
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Missing ${name}. Set it in Vercel → Project → Settings → Environment Variables (Production).`);
+  }
+  return value;
 }
 
-const db = getFirestore();
+function normalizePrivateKey(raw: string): string {
+  let value = raw.trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  }
+  return value.replace(/\\n/g, '\n');
+}
+
+function getDb(): Firestore {
+  if (!getApps().length) {
+    initializeApp({
+      credential: cert({
+        projectId: requireEnv('FIREBASE_PROJECT_ID'),
+        clientEmail: requireEnv('FIREBASE_CLIENT_EMAIL'),
+        privateKey: normalizePrivateKey(requireEnv('FIREBASE_PRIVATE_KEY')),
+      }),
+    });
+  }
+  return getFirestore();
+}
 
 const CITIES = [
   { name: 'New York', lat: 40.7128, lon: -74.0060 },
@@ -32,12 +55,13 @@ const ROUTES = ['Interstate 80', 'Highway 101', 'Interstate 5', 'Highway 280'];
 
 export async function POST(request: Request) {
   try {
+    const db = getDb();
     const body = await request.json().catch(() => ({}));
     const count = Math.min(body.count || 500, 500);
     const reset = body.reset === true;
 
     if (reset) {
-      await clearCollections(['shipments', 'predictions', 'decisions', 'actions_log']);
+      await clearCollections(db, ['shipments', 'predictions', 'decisions', 'actions_log']);
     }
 
     const batch = db.batch();
@@ -90,7 +114,7 @@ export async function GET(request: Request) {
   return POST(request);
 }
 
-async function clearCollections(collections: string[]) {
+async function clearCollections(db: Firestore, collections: string[]) {
   for (const name of collections) {
     const docs = await db.collection(name).limit(500).get();
     if (docs.empty) continue;
