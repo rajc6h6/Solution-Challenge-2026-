@@ -102,18 +102,18 @@ export default function Dashboard() {
     );
 
     const unsubShipments = onSnapshot(shipmentsQuery, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Shipment) }));
+      const data = snapshot.docs.map((doc) => ({ ...(doc.data() as Shipment), id: doc.id }));
       setShipments(data);
       setIsLoading(false);
     });
 
     const unsubPredictions = onSnapshot(predictionsQuery, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Prediction) }));
+      const data = snapshot.docs.map((doc) => ({ ...(doc.data() as Prediction), id: doc.id }));
       setPredictions(data);
     });
 
     const unsubDecisions = onSnapshot(decisionsQuery, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as DecisionFeedItem) }));
+      const data = snapshot.docs.map((doc) => ({ ...(doc.data() as DecisionFeedItem), id: doc.id }));
       setDecisions(data);
     });
 
@@ -137,7 +137,11 @@ export default function Dashboard() {
     const totalShipments = shipments.length;
     const activeShipments = shipments.filter((shipment) => shipment.status === 'active').length;
     const atRiskShipments = shipments.filter((shipment) => shipment.status === 'at_risk').length;
-    const reroutedShipments = shipments.filter((shipment) => shipment.status === 'rerouted').length;
+    const reroutedShipments = new Set(
+      decisions
+        .filter((d) => d.action === 'auto_reroute')
+        .map((d) => d.shipmentId)
+    ).size;
     const avgDisruptionProbability =
       latestPredictions.length > 0
         ? latestPredictions.reduce((sum, prediction) => sum + prediction.disruptionProbability, 0) /
@@ -149,10 +153,20 @@ export default function Dashboard() {
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    const autonomousActionsToday = decisions.filter((decision) => {
-      const executedAt = toDate(decision.executedAt);
-      return decision.executedBy === 'CASCADE_AGENT' && executedAt !== null && executedAt >= todayStart;
-    }).length;
+    // Count unique shipments rerouted today, not total reroute actions
+    const autonomousActionsToday = new Set(
+      decisions
+        .filter((decision) => {
+          const executedAt = toDate(decision.executedAt);
+          return (
+            decision.executedBy === 'CASCADE_AGENT' &&
+            decision.action === 'auto_reroute' &&
+            executedAt !== null &&
+            executedAt >= todayStart
+          );
+        })
+        .map((d) => d.shipmentId)
+    ).size;
 
     return {
       totalShipments,
